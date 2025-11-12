@@ -129,7 +129,7 @@ export function ChatInterface({ username, roomId, roomName, onLogout }: ChatInte
         <div className="sidebar">
           <div className="sidebar-header">
             <Users className="sidebar-icon" />
-            <h2>Active Users</h2>
+            <h2>Active Users ({activeUsers.length})</h2>
           </div>
           <div className="users-list">
             {activeUsers.map((user) => (
