@@ -120,6 +120,12 @@ export function useChatRoom(roomId: string, username: string) {
       setIsLoading(false);
     });
 
+    // Periodically refresh messages as a fallback (every 30 seconds)
+    // This ensures messages are synced even if real-time subscription has issues
+    const messageRefreshInterval = setInterval(() => {
+      loadMessages();
+    }, 30000);
+
     const presenceInterval = setInterval(updatePresence, 5000);
 
     const messagesChannel = supabase
@@ -175,6 +181,7 @@ export function useChatRoom(roomId: string, username: string) {
 
     return () => {
       clearInterval(presenceInterval);
+      clearInterval(messageRefreshInterval);
       clearInterval(cleanupInterval);
       removePresence();
       messagesChannel.unsubscribe();

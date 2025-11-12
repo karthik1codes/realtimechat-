@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Users, Wifi, Globe } from 'lucide-react';
+import { Send, Users, Wifi, Globe, LogOut } from 'lucide-react';
 import { useChatRoom } from '../hooks/useChatRoom';
 
 interface ChatInterfaceProps {
   username: string;
   roomId: string;
   roomName: string;
+  onLogout?: () => void;
 }
 
-export function ChatInterface({ username, roomId, roomName }: ChatInterfaceProps) {
+export function ChatInterface({ username, roomId, roomName, onLogout }: ChatInterfaceProps) {
   const [messageInput, setMessageInput] = useState('');
   const { messages, activeUsers, sendMessage, isLoading } = useChatRoom(roomId, username);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -50,9 +51,39 @@ export function ChatInterface({ username, roomId, roomName }: ChatInterfaceProps
             </p>
           </div>
         </div>
-        <div className="active-users-badge">
-          <Users className="users-icon" />
-          <span>{activeUsers.length} online</span>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div className="active-users-badge">
+            <Users className="users-icon" />
+            <span>{activeUsers.length} online</span>
+          </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '12px',
+                padding: '0.75rem 1.25rem',
+                color: '#ef4444',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+              }}
+            >
+              <LogOut style={{ width: '16px', height: '16px' }} />
+              Logout
+            </button>
+          )}
         </div>
       </div>
 
