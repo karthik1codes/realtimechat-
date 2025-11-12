@@ -200,45 +200,12 @@ body {
   flex-shrink: 0; /* Prevent header from shrinking */
 }
 
-.header-info {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 1rem;
-}
-
-.header-icon {
-  width: 24px;
-  height: 24px;
-  color: #3b82f6;
-}
-
 .room-name {
   font-size: 1.125rem;
   font-weight: 700;
   color: #ffffff;
   line-height: 1.2;
-}
-
-.connection-status {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-top: 0.125rem;
-}
-
-.status-icon {
-  width: 14px;
-  height: 14px;
-  color: #10b981;
-}
-
-.username-highlight {
-  color: #3b82f6;
-  font-weight: 600;
+  margin: 0;
 }
 
 .active-users-badge {

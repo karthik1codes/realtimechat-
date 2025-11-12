@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Users, Wifi, Globe, LogOut, ArrowDown } from 'lucide-react';
+import { Send, Users, LogOut, ArrowDown } from 'lucide-react';
 import { useChatRoom } from '../hooks/useChatRoom';
 
 interface ChatInterfaceProps {
@@ -90,16 +90,7 @@ export function ChatInterface({ username, roomId, roomName, onLogout }: ChatInte
   return (
     <div className="chat-container">
       <div className="chat-header">
-        <div className="header-info">
-          <Globe className="header-icon" />
-          <div>
-            <h1 className="room-name">{roomName}</h1>
-            <p className="connection-status">
-              <Wifi className="status-icon" />
-              Connected as <span className="username-highlight">{username}</span>
-            </p>
-          </div>
-        </div>
+        <h1 className="room-name">{roomName}</h1>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <div className="active-users-badge">
             <Users className="users-icon" />
