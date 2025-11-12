@@ -4,23 +4,53 @@ import { supabase, Message, ActiveUser } from '../lib/supabase';
 export function useChatRoom(roomId: string, username: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [allUsers, setAllUsers] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [connectionId] = useState(() => crypto.randomUUID());
 
   const loadMessages = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: true })
-      .limit(100);
+    // Load all messages without limit to show complete history
+    // Supabase default limit is 1000, but we'll load in batches if needed
+    let allMessages: Message[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
 
-    if (error) {
-      console.error('Error loading messages:', error);
-      return;
+    while (hasMore) {
+      const { data, error, count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact' })
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true })
+        .range(from, from + batchSize - 1);
+
+      if (error) {
+        console.error('Error loading messages:', error);
+        break;
+      }
+
+      if (data && data.length > 0) {
+        allMessages = [...allMessages, ...data];
+        from += batchSize;
+        hasMore = data.length === batchSize;
+      } else {
+        hasMore = false;
+      }
     }
 
-    setMessages(data || []);
+    setMessages(allMessages);
+    
+    // Extract all unique usernames from messages and merge with existing users
+    // This ensures we don't lose users when messages refresh
+    if (allMessages.length > 0) {
+      setAllUsers((prev) => {
+        const updated = new Set(prev);
+        allMessages.forEach((msg) => {
+          updated.add(msg.username);
+        });
+        return updated;
+      });
+    }
   }, [roomId]);
 
   const loadActiveUsers = useCallback(async () => {
@@ -35,6 +65,18 @@ export function useChatRoom(roomId: string, username: string) {
     }
 
     setActiveUsers(data || []);
+    
+    // Also add active users to allUsers to ensure they're permanently visible
+    // This captures users who joined but haven't sent messages yet
+    if (data) {
+      setAllUsers((prev) => {
+        const updated = new Set(prev);
+        data.forEach((user) => {
+          updated.add(user.username);
+        });
+        return updated;
+      });
+    }
   }, [roomId]);
 
   const sendMessage = useCallback(async (content: string) => {
@@ -51,6 +93,13 @@ export function useChatRoom(roomId: string, username: string) {
 
     // Add optimistic message immediately
     setMessages((prev) => [...prev, optimisticMessage]);
+    
+    // Add user to allUsers set
+    setAllUsers((prev) => {
+      const updated = new Set(prev);
+      updated.add(username);
+      return updated;
+    });
 
     // Send to database
     const { data, error } = await supabase
@@ -111,6 +160,14 @@ export function useChatRoom(roomId: string, username: string) {
 
   useEffect(() => {
     setIsLoading(true);
+    // Initialize allUsers with current user to ensure they're always visible
+    // This prevents the sidebar from being blank
+    setAllUsers((prev) => {
+      const updated = new Set(prev);
+      updated.add(username);
+      return updated;
+    });
+    
     // Run all initial data loads in parallel for faster rendering
     Promise.all([
       loadMessages(),
@@ -119,6 +176,19 @@ export function useChatRoom(roomId: string, username: string) {
     ]).finally(() => {
       setIsLoading(false);
     });
+    
+    // Ensure current user stays in the list even after data loads
+    // This prevents the list from becoming empty during refreshes
+    const ensureUserInterval = setInterval(() => {
+      setAllUsers((prev) => {
+        if (!prev.has(username)) {
+          const updated = new Set(prev);
+          updated.add(username);
+          return updated;
+        }
+        return prev;
+      });
+    }, 1000); // Check every second to ensure user is always present
 
     // Periodically refresh messages as a fallback (every 30 seconds)
     // This ensures messages are synced even if real-time subscription has issues
@@ -150,6 +220,13 @@ export function useChatRoom(roomId: string, username: string) {
               );
             }
             return [...prev, newMessage];
+          });
+          
+          // Add new user to allUsers set if they sent a message
+          setAllUsers((prev) => {
+            const updated = new Set(prev);
+            updated.add(newMessage.username);
+            return updated;
           });
         }
       )
@@ -183,6 +260,7 @@ export function useChatRoom(roomId: string, username: string) {
       clearInterval(presenceInterval);
       clearInterval(messageRefreshInterval);
       clearInterval(cleanupInterval);
+      clearInterval(ensureUserInterval);
       removePresence();
       messagesChannel.unsubscribe();
       usersChannel.unsubscribe();
@@ -192,6 +270,7 @@ export function useChatRoom(roomId: string, username: string) {
   return {
     messages,
     activeUsers,
+    allUsers: Array.from(allUsers), // Convert Set to Array for easier use
     sendMessage,
     isLoading,
   };
