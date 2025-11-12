@@ -17,9 +17,9 @@ export function useChatRoom(roomId: string, username: string) {
     let hasMore = true;
 
     while (hasMore) {
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .select('*', { count: 'exact' })
+        .select('*')
         .eq('room_id', roomId)
         .order('created_at', { ascending: true })
         .range(from, from + batchSize - 1);
@@ -84,14 +84,14 @@ export function useChatRoom(roomId: string, username: string) {
 
     // Create optimistic message for immediate UI update
     const optimisticMessage: Message = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${Date.now()}-${Math.random()}`,
       room_id: roomId,
       username,
       content: content.trim(),
       created_at: new Date().toISOString(),
     };
 
-    // Add optimistic message immediately
+    // Add optimistic message immediately for instant feedback
     setMessages((prev) => [...prev, optimisticMessage]);
     
     // Add user to allUsers set
@@ -101,7 +101,7 @@ export function useChatRoom(roomId: string, username: string) {
       return updated;
     });
 
-    // Send to database
+    // Send to database - real-time subscription will handle the update
     const { data, error } = await supabase
       .from('messages')
       .insert([
@@ -118,18 +118,25 @@ export function useChatRoom(roomId: string, username: string) {
       console.error('Error sending message:', error);
       // Remove optimistic message on error
       setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
-      // Show error to user (you can add a toast notification here if needed)
       alert(`Failed to send message: ${error.message}`);
       return;
     }
 
-    // Replace optimistic message with real message from database
+    // Real-time subscription will add the message automatically
+    // But we can also replace optimistic message immediately if real-time is slow
     if (data) {
-      setMessages((prev) => 
-        prev.map((msg) => 
+      setMessages((prev) => {
+        // Check if real-time already added it
+        const realTimeAdded = prev.some((msg) => msg.id === data.id && msg.id !== optimisticMessage.id);
+        if (realTimeAdded) {
+          // Real-time already added it, just remove optimistic
+          return prev.filter((msg) => msg.id !== optimisticMessage.id);
+        }
+        // Replace optimistic with real message
+        return prev.map((msg) => 
           msg.id === optimisticMessage.id ? (data as Message) : msg
-        )
-      );
+        );
+      });
     }
   }, [roomId, username]);
 
@@ -190,16 +197,18 @@ export function useChatRoom(roomId: string, username: string) {
       });
     }, 1000); // Check every second to ensure user is always present
 
-    // Periodically refresh messages as a fallback (every 30 seconds)
-    // This ensures messages are synced even if real-time subscription has issues
-    const messageRefreshInterval = setInterval(() => {
-      loadMessages();
-    }, 30000);
+    // Real-time subscription handles all message updates
+    // No need for periodic refresh - messages appear instantly via Supabase Realtime
 
     const presenceInterval = setInterval(updatePresence, 5000);
 
+    // Set up real-time subscription for instant message updates
     const messagesChannel = supabase
-      .channel(`messages:${roomId}`)
+      .channel(`messages:${roomId}`, {
+        config: {
+          broadcast: { self: true },
+        },
+      })
       .on(
         'postgres_changes',
         {
@@ -210,7 +219,9 @@ export function useChatRoom(roomId: string, username: string) {
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          // Only add if message doesn't already exist (avoid duplicates from optimistic updates)
+          console.log('Real-time message received:', newMessage);
+          
+          // Add message instantly via real-time (no loading needed)
           setMessages((prev) => {
             const exists = prev.some((msg) => msg.id === newMessage.id);
             if (exists) {
@@ -219,6 +230,7 @@ export function useChatRoom(roomId: string, username: string) {
                 msg.id === newMessage.id ? newMessage : msg
               );
             }
+            // Add new message immediately
             return [...prev, newMessage];
           });
           
@@ -230,7 +242,14 @@ export function useChatRoom(roomId: string, username: string) {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Messages channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Real-time messages subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Real-time messages subscription error');
+        }
+      });
 
     const usersChannel = supabase
       .channel(`active_users:${roomId}`)
@@ -258,7 +277,6 @@ export function useChatRoom(roomId: string, username: string) {
 
     return () => {
       clearInterval(presenceInterval);
-      clearInterval(messageRefreshInterval);
       clearInterval(cleanupInterval);
       clearInterval(ensureUserInterval);
       removePresence();
